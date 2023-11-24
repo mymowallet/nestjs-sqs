@@ -8,6 +8,7 @@ export type QueueName = string;
 
 export type SqsConsumerOptions = Omit<ConsumerOptions, 'handleMessage' | 'handleMessageBatch'> & {
   name: QueueName;
+  jobCount?: number;
 };
 
 export type SqsProducerOptions = ProducerOptions & {

@@ -8,7 +8,7 @@ import { SQS_CONSUMER_EVENT_HANDLER, SQS_CONSUMER_METHOD, SQS_OPTIONS } from './
 
 @Injectable()
 export class SqsService implements OnModuleInit, OnModuleDestroy {
-  public readonly consumers = new Map<QueueName, Consumer>();
+  public readonly consumers = new Map<QueueName, Consumer[]>();
   public readonly producers = new Map<QueueName, Producer>();
 
   private logger: LoggerService;
@@ -41,24 +41,24 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
       }
 
       const isBatchHandler = metadata.meta.batch === true;
-      const consumer = Consumer.create({
+      const consumer = Array.from(Array(consumerOptions.jobCount ??  1)).map(() => Consumer.create({
         ...consumerOptions,
         ...(isBatchHandler
           ? {
-              handleMessageBatch: metadata.discoveredMethod.handler.bind(
-                metadata.discoveredMethod.parentClass.instance,
-              ),
-            }
+            handleMessageBatch: metadata.discoveredMethod.handler.bind(
+              metadata.discoveredMethod.parentClass.instance,
+            ),
+          }
           : { handleMessage: metadata.discoveredMethod.handler.bind(metadata.discoveredMethod.parentClass.instance) }),
-      });
+      })).reduce((acc, value) => acc.concat(value), []);
 
       const eventsMetadata = eventHandlers.filter(({ meta }) => meta.name === name);
       for (const eventMetadata of eventsMetadata) {
         if (eventMetadata) {
-          consumer.addListener(
+          consumer.forEach((c) => c.addListener(
             eventMetadata.meta.eventName,
             eventMetadata.discoveredMethod.handler.bind(metadata.discoveredMethod.parentClass.instance),
-          );
+          ));
         }
       }
       this.consumers.set(name, consumer);
@@ -75,13 +75,13 @@ export class SqsService implements OnModuleInit, OnModuleDestroy {
     });
 
     for (const consumer of this.consumers.values()) {
-      consumer.start();
+      consumer.forEach((c) => c.start());
     }
   }
 
   public onModuleDestroy() {
     for (const consumer of this.consumers.values()) {
-      consumer.stop();
+      consumer.forEach((c) => c.stop());
     }
   }
 
